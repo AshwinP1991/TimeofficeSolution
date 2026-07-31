@@ -27,8 +27,7 @@ TimeOfficeSync/
 ├── Program.cs                 # Entry point
 ├── appsettings.json           # Configuration
 └── Scripts/
-    ├── CreateAttenifoTable.sql
-    └── CreatePunchDataTable.sql
+    └── CreateAttenifoTable.sql
 ```
 
 ## Database Setup
