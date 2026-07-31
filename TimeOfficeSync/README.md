@@ -31,7 +31,63 @@ TimeOfficeSync/
     └── CreatePunchDataTable.sql
 ```
 
-## Database Tables
+## Database Setup
+
+Run these SQL scripts on target database to create tables:
+
+### ApiLog Table
+```sql
+CREATE TABLE [dbo].[ApiLog](
+    [Id] [int] IDENTITY(1,1) NOT NULL,
+    [RequestUrl] [nvarchar](500) NOT NULL,
+    [RequestTime] [datetime] NOT NULL,
+    [Status] [nvarchar](10) NOT NULL,
+    [RecordsCount] [int] NULL,
+    [ExceptionMsg] [nvarchar](max) NULL,
+    [CreatedDate] [datetime] NULL,
+PRIMARY KEY CLUSTERED ([Id] ASC)
+)
+
+ALTER TABLE [dbo].[ApiLog] ADD DEFAULT ((0)) FOR [RecordsCount]
+ALTER TABLE [dbo].[ApiLog] ADD DEFAULT (getdate()) FOR [CreatedDate]
+```
+
+### ApiSyncStatus Table
+```sql
+CREATE TABLE [dbo].[ApiSyncStatus](
+    [Id] [int] NOT NULL,
+    [LastSyncTime] [datetime] NULL,
+    [CreatedDate] [datetime] NULL,
+    [ModifiedDate] [datetime] NULL,
+PRIMARY KEY CLUSTERED ([Id] ASC)
+)
+
+ALTER TABLE [dbo].[ApiSyncStatus] ADD DEFAULT ((1)) FOR [Id]
+ALTER TABLE [dbo].[ApiSyncStatus] ADD DEFAULT (getdate()) FOR [CreatedDate]
+ALTER TABLE [dbo].[ApiSyncStatus] ADD DEFAULT (getdate()) FOR [ModifiedDate]
+```
+
+### Attenifo Table
+```sql
+CREATE TABLE [dbo].[Attenifo](
+    [Srno] [int] IDENTITY(1,1) NOT NULL,
+    [EmpCode] [nvarchar](50) NULL,
+    [TicketNo] [nvarchar](50) NULL,
+    [EntryDate] [date] NOT NULL,
+    [InOutFlag] [nvarchar](10) NULL,
+    [EntryTime] [time](7) NOT NULL,
+    [TrfFlag] [nvarchar](10) NULL,
+    [UpdateUID] [nvarchar](100) NULL,
+    [Location] [nvarchar](100) NULL,
+    [ErrMsg] [nvarchar](255) NULL,
+PRIMARY KEY CLUSTERED ([Srno] ASC)
+)
+
+CREATE INDEX IX_Attenifo_EmpCode ON [dbo].[Attenifo] ([EmpCode])
+CREATE INDEX IX_Attenifo_EntryDate ON [dbo].[Attenifo] ([EntryDate])
+```
+
+## Tables Description
 
 ### Attenifo
 | Column | Type | Description |
