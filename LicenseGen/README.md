@@ -62,12 +62,12 @@ dotnet run -- license "2027-07-31 23:59:59"
 
 ```powershell
 # Encrypt username
-dotnet run -- encrypt "info@softovista.com"
-# Output: bSnCUTtySLYVZd6TeWVnriMjbu1UgP5jZAgAwW9xYOU=
+dotnet run -- encrypt "your-email@example.com"
+# Output: (encrypted value - copy to appsettings.json)
 
 # Encrypt password
-dotnet run -- encrypt "qczsphsyqrhnsntl"
-# Output: pV8nPwfVkTlsfhr1InM6aGCnQ3828DISB46+guqlFc0=
+dotnet run -- encrypt "your-password"
+# Output: (encrypted value - copy to appsettings.json)
 ```
 
 ## Update appsettings.json
@@ -95,6 +95,6 @@ dotnet build
 
 ## Notes
 
-- All encryption uses AES with key: `TimeOffice2026K!`
+- All encryption uses AES with key: (hidden for security)
 - License key format: `yyyy-MM-dd HH:mm:ss`
 - Encrypted values are Base64 encoded
