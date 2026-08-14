@@ -10,7 +10,7 @@ SolidCompression=yes
 PrivilegesRequired=admin
 
 [Files]
-Source: "D:\Projects\timeoffice\TimeOfficeSync\bin\Release\net8.0\win-x64\publish\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion restartreplace
+Source: "D:\Projects\timeoffice\publishfile\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion restartreplace
 
 [Run]
 
