@@ -6,12 +6,15 @@ namespace TimeOfficeSync.Services;
 public class DatabaseService
 {
     private readonly string _connectionString;
+    private readonly string _table;
     private readonly ILogger<DatabaseService> _logger;
 
     public DatabaseService(IConfiguration configuration, ILogger<DatabaseService> logger)
     {
-        _connectionString = configuration["DatabaseSettings:ConnectionString"] ?? "";
+        _connectionString = configuration["DatabaseSettings:ConnectionString"] ?? "Attenifo";
         _logger = logger;
+        _table = configuration["DatabaseSettings:tablename"] ?? "";
+
     }
 
     public async Task<int> SavePunchDataAsync(List<PunchData> punchDataList)
@@ -36,7 +39,12 @@ public class DatabaseService
                     }
 
                     var entryDate = punchDateTime.Date;
-                    var entryTime = punchDateTime.TimeOfDay;
+                    var entryTime = new DateTime(
+                     1900, 1, 1,
+                     punchDateTime.Hour,
+                     punchDateTime.Minute,
+                     punchDateTime.Second
+                 );
 
                     // Determine InOutFlag based on M_Flag or time
                     var inOutFlag = "Z"; // Default no value
@@ -47,8 +55,8 @@ public class DatabaseService
                             inOutFlag = flag;
                     }
 
-                    var sql = @"
-                        IF NOT EXISTS (SELECT 1 FROM [Attenifo] WHERE [EmpCode] = @EmpCode AND [EntryDate] = @EntryDate AND [EntryTime] = @EntryTime)
+                    var sql = $@"
+                        IF NOT EXISTS (SELECT 1 FROM  [{_table}]   WHERE [EmpCode] = @EmpCode AND [EntryDate] = @EntryDate AND [EntryTime] = @EntryTime)
                         BEGIN
                             INSERT INTO [Attenifo] ([EmpCode], [EntryDate], [InOutFlag], [EntryTime], [TrfFlag], [UpdateUID], [Location], [ErrMsg])
                             VALUES (@EmpCode, @EntryDate, @InOutFlag, @EntryTime, @TrfFlag, @UpdateUID, @Location, @ErrMsg)
