@@ -58,7 +58,7 @@ public class DatabaseService
                     var sql = $@"
                         IF NOT EXISTS (SELECT 1 FROM  [{_table}]   WHERE [EmpCode] = @EmpCode AND [EntryDate] = @EntryDate AND [EntryTime] = @EntryTime)
                         BEGIN
-                            INSERT INTO [Attenifo] ([EmpCode], [EntryDate], [InOutFlag], [EntryTime], [TrfFlag], [UpdateUID], [Location], [ErrMsg])
+                            INSERT INTO [{_table}] ([EmpCode], [EntryDate], [InOutFlag], [EntryTime], [TrfFlag], [UpdateUID], [Location], [ErrMsg])
                             VALUES (@EmpCode, @EntryDate, @InOutFlag, @EntryTime, @TrfFlag, @UpdateUID, @Location, @ErrMsg)
                         END";
 
