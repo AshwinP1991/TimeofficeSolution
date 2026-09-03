@@ -1,7 +1,5 @@
 using System.Net;
 using System.Net.Mail;
-using System.Security.Cryptography;
-using System.Text;
 
 namespace TimeOfficeSync.Services;
 
@@ -9,12 +7,13 @@ public class EmailService
 {
     private readonly IConfiguration _configuration;
     private readonly ILogger<EmailService> _logger;
-    private static readonly byte[] Key = Encoding.UTF8.GetBytes("TimeOffice2026K!");
+    private readonly string _passphrase;
 
     public EmailService(IConfiguration configuration, ILogger<EmailService> logger)
     {
         _configuration = configuration;
         _logger = logger;
+        _passphrase = CryptoHelper.GetPassphrase(configuration);
     }
 
     public async Task SendLicenseExpiredEmailAsync(DateTime expiryDate, int daysExpired)
@@ -85,17 +84,8 @@ public class EmailService
         }
     }
 
-    private static string Decrypt(string cipherText)
+    private string Decrypt(string cipherText)
     {
-        using var aes = Aes.Create();
-        aes.Key = Key;
-        aes.IV = new byte[16];
-
-        var buffer = Convert.FromBase64String(cipherText);
-        using var decryptor = aes.CreateDecryptor();
-        using var ms = new MemoryStream(buffer);
-        using var cs = new CryptoStream(ms, decryptor, CryptoStreamMode.Read);
-        using var sr = new StreamReader(cs);
-        return sr.ReadToEnd();
+        return CryptoHelper.DecryptToString(cipherText, _passphrase);
     }
 }

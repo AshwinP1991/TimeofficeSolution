@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
 using Microsoft.Data.SqlClient;
 
 namespace TimeOfficeSync.Services;
@@ -10,8 +8,7 @@ public class LicenseService
     private readonly ILogger<LicenseService> _logger;
     private readonly EmailService _emailService;
     private readonly string _connectionString;
-
-    private static readonly byte[] Key = Encoding.UTF8.GetBytes("TimeOffice2026K!");
+    private readonly string _passphrase;
     private bool _emailSent = false;
 
     public LicenseService(IConfiguration configuration, ILogger<LicenseService> logger, EmailService emailService)
@@ -20,6 +17,7 @@ public class LicenseService
         _logger = logger;
         _emailService = emailService;
         _connectionString = configuration["DatabaseSettings:ConnectionString"] ?? "";
+        _passphrase = CryptoHelper.GetPassphrase(configuration);
     }
 
     public async Task<bool> IsLicenseValidAsync()
@@ -34,7 +32,7 @@ public class LicenseService
                 return false;
             }
 
-            var expiryDate = Decrypt(encryptedKey);
+            var expiryDate = DecryptLicense(encryptedKey);
             var remainingDays = (expiryDate - DateTime.Now).Days;
 
             if (DateTime.Now > expiryDate)
@@ -69,7 +67,7 @@ public class LicenseService
         var encryptedKey = _configuration["LicenseSettings:LicenseKey"];
         if (string.IsNullOrEmpty(encryptedKey))
             return DateTime.MinValue;
-        return Decrypt(encryptedKey);
+        return DecryptLicense(encryptedKey);
     }
 
     private void LogLicense(string message, bool isExpired, DateTime? expiryDate, string? details)
@@ -97,35 +95,24 @@ public class LicenseService
         }
     }
 
-    public static string Encrypt(DateTime dateTime)
+    public static string Encrypt(DateTime dateTime, string passphrase)
     {
-        var plainText = dateTime.ToString("yyyy-MM-dd HH:mm:ss");
-        using var aes = Aes.Create();
-        aes.Key = Key;
-        aes.IV = new byte[16];
-
-        using var encryptor = aes.CreateEncryptor();
-        using var ms = new MemoryStream();
-        using (var cs = new CryptoStream(ms, encryptor, CryptoStreamMode.Write))
-        using (var sw = new StreamWriter(cs))
-        {
-            sw.Write(plainText);
-        }
-        return Convert.ToBase64String(ms.ToArray());
+        if (string.IsNullOrWhiteSpace(passphrase))
+            throw new ArgumentException("Encryption key is required (user input).", nameof(passphrase));
+        return CryptoHelper.Encrypt(dateTime.ToString("yyyy-MM-dd HH:mm:ss"), passphrase);
     }
 
-    public static DateTime Decrypt(string cipherText)
+    public DateTime DecryptLicense(string cipherText)
     {
-        using var aes = Aes.Create();
-        aes.Key = Key;
-        aes.IV = new byte[16];
+        var plainText = CryptoHelper.DecryptToString(cipherText, _passphrase);
+        return DateTime.ParseExact(plainText, "yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture);
+    }
 
-        var buffer = Convert.FromBase64String(cipherText);
-        using var decryptor = aes.CreateDecryptor();
-        using var ms = new MemoryStream(buffer);
-        using var cs = new CryptoStream(ms, decryptor, CryptoStreamMode.Read);
-        using var sr = new StreamReader(cs);
-        var plainText = sr.ReadToEnd();
+    public static DateTime Decrypt(string cipherText, string passphrase)
+    {
+        if (string.IsNullOrWhiteSpace(passphrase))
+            throw new ArgumentException("Encryption key is required (user input).", nameof(passphrase));
+        var plainText = CryptoHelper.DecryptToString(cipherText, passphrase);
         return DateTime.ParseExact(plainText, "yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture);
     }
 }
