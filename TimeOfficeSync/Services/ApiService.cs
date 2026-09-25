@@ -1,23 +1,22 @@
 using System.Text;
 using System.Text.Json;
-using Microsoft.Data.SqlClient;
 using TimeOfficeSync.Models;
 
 namespace TimeOfficeSync.Services;
 
-public class ApiService
+public class ApiService : IPunchDataProvider
 {
     private readonly HttpClient _httpClient;
     private readonly IConfiguration _configuration;
     private readonly ILogger<ApiService> _logger;
-    private readonly string _connectionString;
+    private readonly ApiLogService _apiLog;
 
-    public ApiService(HttpClient httpClient, IConfiguration configuration, ILogger<ApiService> logger)
+    public ApiService(HttpClient httpClient, IConfiguration configuration, ILogger<ApiService> logger, ApiLogService apiLog)
     {
         _httpClient = httpClient;
         _configuration = configuration;
         _logger = logger;
-        _connectionString = configuration["DatabaseSettings:ConnectionString"] ?? "";
+        _apiLog = apiLog;
     }
 
     public async Task<List<PunchData>> GetPunchDataAsync(DateTime fromDate, DateTime toDate)
@@ -30,8 +29,12 @@ public class ApiService
 
         try
         {
-            var baseUrl = _configuration["ApiSettings:BaseUrl"] ?? "https://api.etimeoffice.com/api/DownloadPunchData";
-            var username = _configuration["ApiSettings:Username"] ?? "";
+            var baseUrl = _configuration["ApiSettings:ETimeOffice:BaseUrl"]
+                ?? _configuration["ApiSettings:BaseUrl"]
+                ?? "https://api.etimeoffice.com/api/DownloadPunchData";
+            var username = _configuration["ApiSettings:ETimeOffice:Username"]
+                ?? _configuration["ApiSettings:Username"]
+                ?? "";
 
             var fromDateStr = fromDate.ToString("dd/MM/yyyy_HH:mm", System.Globalization.CultureInfo.InvariantCulture);
             var toDateStr = toDate.ToString("dd/MM/yyyy_HH:mm", System.Globalization.CultureInfo.InvariantCulture);
@@ -56,7 +59,7 @@ public class ApiService
                 status = "Fail";
                 exceptionMsg = apiResponse?.Msg ?? "Null response";
                 _logger.LogWarning("API returned error: {Message}", exceptionMsg);
-                await LogApiRequestAsync(url, requestTime, status, recordsCount, exceptionMsg);
+                await _apiLog.LogApiRequestAsync(url, requestTime, status, recordsCount, exceptionMsg);
                 return new List<PunchData>();
             }
 
@@ -64,7 +67,7 @@ public class ApiService
             status = "Success";
 
             _logger.LogInformation("Successfully fetched {Count} punch records from API", recordsCount);
-            await LogApiRequestAsync(url, requestTime, status, recordsCount, null);
+            await _apiLog.LogApiRequestAsync(url, requestTime, status, recordsCount, null);
             return apiResponse.PunchData;
         }
         catch (Exception ex)
@@ -72,33 +75,8 @@ public class ApiService
             status = "Fail";
             exceptionMsg = ex.Message;
             _logger.LogError(ex, "Error fetching punch data from API");
-            await LogApiRequestAsync(url, requestTime, status, recordsCount, exceptionMsg);
+            await _apiLog.LogApiRequestAsync(url, requestTime, status, recordsCount, exceptionMsg);
             throw;
-        }
-    }
-
-    private async Task LogApiRequestAsync(string url, DateTime requestTime, string status, int recordsCount, string? exceptionMsg)
-    {
-        try
-        {
-            using var connection = new SqlConnection(_connectionString);
-            await connection.OpenAsync();
-
-            var sql = @"INSERT INTO [ApiLog] ([RequestUrl], [RequestTime], [Status], [RecordsCount], [ExceptionMsg])
-                        VALUES (@RequestUrl, @RequestTime, @Status, @RecordsCount, @ExceptionMsg)";
-
-            using var command = new SqlCommand(sql, connection);
-            command.Parameters.AddWithValue("@RequestUrl", url);
-            command.Parameters.AddWithValue("@RequestTime", requestTime);
-            command.Parameters.AddWithValue("@Status", status);
-            command.Parameters.AddWithValue("@RecordsCount", recordsCount);
-            command.Parameters.AddWithValue("@ExceptionMsg", (object?)exceptionMsg ?? DBNull.Value);
-
-            await command.ExecuteNonQueryAsync();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to log API request");
         }
     }
 }

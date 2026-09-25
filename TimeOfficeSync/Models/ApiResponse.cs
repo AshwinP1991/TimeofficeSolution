@@ -14,4 +14,6 @@ public class PunchData
     public string Empcode { get; set; } = string.Empty;
     public string PunchDate { get; set; } = string.Empty;
     public string M_Flag { get; set; } = string.Empty;
+    public string? Location { get; set; }
+    public string? AttendanceType { get; set; }
 }

@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LicenseGen - License Manager</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f5f5f5; min-height: 100vh; }
+        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; text-align: center; }
+        .header h1 { font-size: 24px; margin-bottom: 5px; }
+        .header p { opacity: 0.9; font-size: 14px; }
+        .container { max-width: 800px; margin: 20px auto; padding: 0 20px; }
+        .card { background: white; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-bottom: 20px; overflow: hidden; }
+        .card-header { background: #f8f9fa; padding: 15px 20px; border-bottom: 1px solid #eee; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+        .card-header h2 { font-size: 16px; color: #333; }
+        .card-header .badge { background: #667eea; color: white; padding: 2px 8px; border-radius: 4px; font-size: 12px; }
+        .card-body { padding: 20px; display: none; }
+        .card-body.active { display: block; }
+        .form-group { margin-bottom: 15px; }
+        .form-group label { display: block; margin-bottom: 5px; font-weight: 500; color: #555; font-size: 14px; }
+        .form-group input, .form-group textarea { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }
+        .form-group input:focus, .form-group textarea:focus { outline: none; border-color: #667eea; }
+        .form-group textarea { min-height: 80px; resize: vertical; font-family: monospace; }
+        .btn { padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 500; }
+        .btn-primary { background: #667eea; color: white; }
+        .btn-primary:hover { background: #5a6fd6; }
+        .btn-secondary { background: #6c757d; color: white; }
+        .btn-secondary:hover { background: #5a6268; }
+        .result { margin-top: 15px; padding: 15px; background: #f8f9fa; border-radius: 4px; display: none; }
+        .result.show { display: block; }
+        .result.success { border-left: 4px solid #28a745; }
+        .result.error { border-left: 4px solid #dc3545; }
+        .result pre { margin: 0; white-space: pre-wrap; word-break: break-all; font-family: monospace; font-size: 13px; }
+        .status { padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: 500; }
+        .status.valid { background: #d4edda; color: #155724; }
+        .status.expired { background: #f8d7da; color: #721c24; }
+        .health-status { text-align: center; padding: 20px; }
+        .health-status .dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; margin-right: 8px; }
+        .health-status .dot.green { background: #28a745; }
+        .health-status .dot.red { background: #dc3545; }
+        .footer { text-align: center; padding: 20px; color: #888; font-size: 12px; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>LicenseGen</h1>
+        <p>License Key Generator &amp; Manager</p>
+    </div>
+
+    <div class="container">
+        <!-- Health Check -->
+        <div class="card">
+            <div class="card-header" onclick="toggleCard('health')">
+                <h2>Health Check</h2>
+                <span class="badge">GET</span>
+            </div>
+            <div id="health" class="card-body active">
+                <div class="health-status">
+                    <p>Server Status: <span class="dot green"></span> <strong id="healthStatus">Checking...</strong></p>
+                    <p style="margin-top:10px; color:#888; font-size:12px;" id="healthTime"></p>
+                    <button class="btn btn-primary" onclick="checkHealth()" style="margin-top:15px">Refresh</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Encrypt -->
+        <div class="card">
+            <div class="card-header" onclick="toggleCard('encrypt')">
+                <h2>Encrypt Text/date/devicecount/anytext</h2>
+                <span class="badge">POST</span>
+            </div>
+            <div id="encrypt" class="card-body">
+                <div class="form-group">
+                    <label>Text to Encrypt</label>
+                    <input type="text" id="encryptText" placeholder="Enter text to encrypt...">
+                </div>
+                <div class="form-group">
+                    <label>Encryption Key (optional)</label>
+                    <input type="text" id="encryptKey" placeholder="Leave empty for default key">
+                </div>
+                <button class="btn btn-primary" onclick="encrypt()">Encrypt</button>
+                <div id="encryptResult" class="result"></div>
+            </div>
+        </div>
+
+        <!-- Decrypt -->
+        <div class="card">
+            <div class="card-header" onclick="toggleCard('decrypt')">
+                <h2>Decrypt Text/date/devicecount/anytext</h2>
+                <span class="badge">POST</span>
+            </div>
+            <div id="decrypt" class="card-body">
+                <div class="form-group">
+                    <label>Encrypted Text (Base64)</label>
+                    <textarea id="decryptText" placeholder="Enter encrypted text..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Encryption Key (optional)</label>
+                    <input type="text" id="decryptKey" placeholder="Leave empty for default key">
+                </div>
+                <button class="btn btn-primary" onclick="decrypt()">Decrypt</button>
+                <div id="decryptResult" class="result"></div>
+            </div>
+        </div>
+
+        <!-- Generate License (hidden) -->
+        <div class="card" style="display:none">
+            <div class="card-header" onclick="toggleCard('license')">
+                <h2>Generate License Key</h2>
+                <span class="badge">POST</span>
+            </div>
+            <div id="license" class="card-body">
+                <div class="form-group">
+                    <label>Expiry Date &amp; Time</label>
+                    <input type="datetime-local" id="licenseExpiry">
+                </div>
+                <div class="form-group">
+                    <label>Encryption Key (optional)</label>
+                    <input type="text" id="licenseKey" placeholder="Leave empty for default key">
+                </div>
+                <button class="btn btn-primary" onclick="generateLicense()">Generate License</button>
+                <div id="licenseResult" class="result"></div>
+            </div>
+        </div>
+
+        <!-- Decrypt License (hidden) -->
+        <div class="card" style="display:none">
+            <div class="card-header" onclick="toggleCard('decryptLicense')">
+                <h2>Decrypt &amp; Validate License</h2>
+                <span class="badge">POST</span>
+            </div>
+            <div id="decryptLicense" class="card-body">
+                <div class="form-group">
+                    <label>License Key (Base64)</label>
+                    <textarea id="decryptLicenseText" placeholder="Enter license key..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Encryption Key (optional)</label>
+                    <input type="text" id="decryptLicenseKey" placeholder="Leave empty for default key">
+                </div>
+                <button class="btn btn-primary" onclick="decryptLicense()">Validate License</button>
+                <div id="decryptLicenseResult" class="result"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="footer">
+        <p>LicenseGen v1.0 - SOFTO ALERT</p>
+    </div>
+
+    <script>
+        function toggleCard(id) {
+            const card = document.getElementById(id);
+            card.classList.toggle('active');
+        }
+
+        function showResult(elementId, success, data) {
+            const el = document.getElementById(elementId);
+            el.classList.remove('success', 'error', 'show');
+            el.classList.add(success ? 'success' : 'error', 'show');
+            el.innerHTML = `<pre>${typeof data === 'object' ? JSON.stringify(data, null, 2) : data}</pre>`;
+        }
+
+        async function checkHealth() {
+            try {
+                const res = await fetch('/health');
+                const data = await res.json();
+                document.getElementById('healthStatus').textContent = 'Online';
+                document.getElementById('healthTime').textContent = `Last checked: ${new Date().toLocaleString()}`;
+            } catch (e) {
+                document.getElementById('healthStatus').textContent = 'Offline';
+            }
+        }
+
+        async function encrypt() {
+            const text = document.getElementById('encryptText').value;
+            const key = document.getElementById('encryptKey').value || null;
+            if (!text) return showResult('encryptResult', false, 'Please enter text to encrypt');
+
+            try {
+                const res = await fetch('/api/encrypt', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text, key })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    showResult('encryptResult', true, `Encrypted: ${data.encrypted}`);
+                    navigator.clipboard.writeText(data.encrypted);
+                } else {
+                    showResult('encryptResult', false, data.error || 'Encryption failed');
+                }
+            } catch (e) {
+                showResult('encryptResult', false, 'Connection error');
+            }
+        }
+
+        async function decrypt() {
+            const text = document.getElementById('decryptText').value;
+            const key = document.getElementById('decryptKey').value || null;
+            if (!text) return showResult('decryptResult', false, 'Please enter text to decrypt');
+
+            try {
+                const res = await fetch('/api/decrypt', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text, key })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    showResult('decryptResult', true, `Decrypted: ${data.decrypted}`);
+                } else {
+                    showResult('decryptResult', false, data.error || 'Decryption failed');
+                }
+            } catch (e) {
+                showResult('decryptResult', false, 'Connection error');
+            }
+        }
+
+        async function generateLicense() {
+            const expiryInput = document.getElementById('licenseExpiry').value;
+            const key = document.getElementById('licenseKey').value || null;
+            if (!expiryInput) return showResult('licenseResult', false, 'Please select expiry date');
+
+            const expiry = expiryInput.replace('T', ' ') + ':00';
+
+            try {
+                const res = await fetch('/api/license/generate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ expiry, key })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    showResult('licenseResult', true, `License Key: ${data.license}\nExpiry: ${data.expiry}`);
+                    navigator.clipboard.writeText(data.license);
+                } else {
+                    showResult('licenseResult', false, data.error || 'Generation failed');
+                }
+            } catch (e) {
+                showResult('licenseResult', false, 'Connection error');
+            }
+        }
+
+        async function decryptLicense() {
+            const license = document.getElementById('decryptLicenseText').value;
+            const key = document.getElementById('decryptLicenseKey').value || null;
+            if (!license) return showResult('decryptLicenseResult', false, 'Please enter license key');
+
+            try {
+                const res = await fetch('/api/license/decrypt', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ license, key })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    const statusClass = data.valid ? 'valid' : 'expired';
+                    const statusText = data.valid
+                        ? `VALID (${data.remainingDays} days remaining)`
+                        : `EXPIRED (${Math.abs(data.remainingDays)} days ago)`;
+                    showResult('decryptLicenseResult', data.valid,
+                        `Expiry: ${data.expiry}\nStatus: <span class="status ${statusClass}">${statusText}</span>`);
+                } else {
+                    showResult('decryptLicenseResult', false, data.error || 'Validation failed');
+                }
+            } catch (e) {
+                showResult('decryptLicenseResult', false, 'Connection error');
+            }
+        }
+
+        checkHealth();
+    </script>
+</body>
+</html>

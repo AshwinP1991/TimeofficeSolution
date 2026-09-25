@@ -9,12 +9,22 @@ public class DatabaseService
     private readonly string _table;
     private readonly ILogger<DatabaseService> _logger;
 
+    private HashSet<string>? _columns;
+    private string? _insertSql;
+    private string? _dedupeWhere;
+    private bool _schemaFailed;
+
+    private static readonly string[] DesiredColumns =
+    {
+        "EmpCode", "EntryDate", "TicketNo", "InOutFlag", "EntryTime",
+        "TrfFlag", "UpdateUID", "Location", "ErrMsg", "attendance_type"
+    };
+
     public DatabaseService(IConfiguration configuration, ILogger<DatabaseService> logger)
     {
-        _connectionString = configuration["DatabaseSettings:ConnectionString"] ?? "Attenifo";
+        _connectionString = configuration["DatabaseSettings:ConnectionString"] ?? "";
         _logger = logger;
-        _table = configuration["DatabaseSettings:tablename"] ?? "";
-
+        _table = configuration["DatabaseSettings:tablename"] ?? "Attenifo";
     }
 
     public async Task<int> SavePunchDataAsync(List<PunchData> punchDataList)
@@ -25,6 +35,9 @@ public class DatabaseService
         {
             await connection.OpenAsync();
             _logger.LogInformation("Connected to database");
+
+            if (!await EnsureSchemaAsync(connection))
+                return 0;
 
             foreach (var punchData in punchDataList)
             {
@@ -40,14 +53,13 @@ public class DatabaseService
 
                     var entryDate = punchDateTime.Date;
                     var entryTime = new DateTime(
-                     1900, 1, 1,
-                     punchDateTime.Hour,
-                     punchDateTime.Minute,
-                     punchDateTime.Second
-                 );
+                        1900, 1, 1,
+                        punchDateTime.Hour,
+                        punchDateTime.Minute,
+                        punchDateTime.Second
+                    );
 
-                    // Determine InOutFlag based on M_Flag or time
-                    var inOutFlag = "Z"; // Default no value
+                    var inOutFlag = "Z";
                     if (!string.IsNullOrEmpty(punchData.M_Flag))
                     {
                         var flag = punchData.M_Flag.ToUpper();
@@ -55,23 +67,18 @@ public class DatabaseService
                             inOutFlag = flag;
                     }
 
-                    var sql = $@"
-                        IF NOT EXISTS (SELECT 1 FROM  [{_table}]   WHERE [EmpCode] = @EmpCode AND [EntryDate] = @EntryDate AND [EntryTime] = @EntryTime)
-                        BEGIN
-                            INSERT INTO [{_table}] ([EmpCode], [EntryDate], [InOutFlag], [EntryTime], [TrfFlag], [UpdateUID], [Location], [ErrMsg])
-                            VALUES (@EmpCode, @EntryDate, @InOutFlag, @EntryTime, @TrfFlag, @UpdateUID, @Location, @ErrMsg)
-                        END";
-
-                    using (var command = new SqlCommand(sql, connection))
+                    using (var command = new SqlCommand(_insertSql, connection))
                     {
-                        command.Parameters.AddWithValue("@EmpCode", punchData.Empcode);
-                        command.Parameters.AddWithValue("@EntryDate", entryDate);
-                        command.Parameters.AddWithValue("@InOutFlag", inOutFlag);
-                        command.Parameters.AddWithValue("@EntryTime", entryTime);
-                        command.Parameters.AddWithValue("@TrfFlag", "0");
-                        command.Parameters.AddWithValue("@UpdateUID", DBNull.Value);
-                        command.Parameters.AddWithValue("@Location", DBNull.Value);
-                        command.Parameters.AddWithValue("@ErrMsg", DBNull.Value);
+                        AddParam(command, "EmpCode", punchData.Empcode);
+                        AddParam(command, "EntryDate", entryDate);
+                        AddParam(command, "InOutFlag", inOutFlag);
+                        AddParam(command, "EntryTime", entryTime);
+                        AddParam(command, "TrfFlag", "0");
+                        AddParam(command, "UpdateUID", string.IsNullOrWhiteSpace(punchData.Empcode) ? DBNull.Value : punchData.Empcode);
+                        AddParam(command, "Location", Truncate(punchData.Location, 100));
+                        AddParam(command, "ErrMsg", DBNull.Value);
+                        AddParam(command, "TicketNo", DBNull.Value);
+                        AddParam(command, "attendance_type", Truncate(punchData.AttendanceType, 50));
 
                         var result = await command.ExecuteNonQueryAsync();
                         if (result > 0)
@@ -87,8 +94,88 @@ public class DatabaseService
             }
         }
 
-        _logger.LogInformation("Saved {Count} new punch records to Attenifo table", recordsSaved);
+        _logger.LogInformation("Saved {Count} new punch records to {Table} table", recordsSaved, _table);
         return recordsSaved;
+    }
+
+    private static void AddParam(SqlCommand command, string name, object value)
+    {
+        if (!command.Parameters.Contains("@" + name))
+            command.Parameters.AddWithValue("@" + name, value);
+    }
+
+    private static object Truncate(string? value, int maxLength)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return DBNull.Value;
+        var v = value.Trim();
+        return v.Length > maxLength ? v[..maxLength] : v;
+    }
+
+    private async Task<bool> EnsureSchemaAsync(SqlConnection connection)
+    {
+        if (_insertSql != null)
+            return true;
+        if (_schemaFailed)
+            return false;
+
+        try
+        {
+            var columns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            using (var cmd = new SqlCommand(
+                @"SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = @Table", connection))
+            {
+                cmd.Parameters.AddWithValue("@Table", _table);
+                using var reader = await cmd.ExecuteReaderAsync();
+                while (await reader.ReadAsync())
+                {
+                    columns.Add(reader.GetString(0));
+                }
+            }
+
+            _columns = columns;
+
+            if (!columns.Contains("EmpCode") || !columns.Contains("EntryDate"))
+            {
+                _schemaFailed = true;
+                _logger.LogError("Table [{Table}] missing mandatory columns (EmpCode, EntryDate). Present: {Cols}",
+                    _table, string.Join(", ", columns));
+                return false;
+            }
+
+            var present = DesiredColumns.Where(columns.Contains).ToArray();
+
+            var colList = string.Join(", ", present.Select(c => $"[{c}]"));
+            var parmList = string.Join(", ", present.Select(c => $"@{c}"));
+
+            var dedupeCols = new List<string> { "EmpCode", "EntryDate" };
+            if (columns.Contains("EntryTime"))
+                dedupeCols.Add("EntryTime");
+
+            _dedupeWhere = string.Join(" AND ", dedupeCols.Select(c => $"[{c}] = @{c}"));
+
+            _insertSql = $@"
+                IF NOT EXISTS (SELECT 1 FROM [{_table}] WHERE {_dedupeWhere})
+                BEGIN
+                    INSERT INTO [{_table}] ({colList})
+                    VALUES ({parmList})
+                END";
+
+            var missing = DesiredColumns.Where(c => !columns.Contains(c)).ToArray();
+            if (missing.Length > 0)
+            {
+                _logger.LogInformation("Table [{Table}] missing optional columns (skipped): {Missing}",
+                    _table, string.Join(", ", missing));
+            }
+
+            _logger.LogInformation("Insert SQL for [{Table}]: {Sql}", _table, _insertSql.Replace("\r", " ").Replace("\n", " "));
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to probe schema for table [{Table}]", _table);
+            return false;
+        }
     }
 
     public async Task<int> GetTotalRecordsCountAsync()
@@ -96,7 +183,7 @@ public class DatabaseService
         using (var connection = new SqlConnection(_connectionString))
         {
             await connection.OpenAsync();
-            using (var command = new SqlCommand("SELECT COUNT(*) FROM [Attenifo]", connection))
+            using (var command = new SqlCommand($"SELECT COUNT(*) FROM [{_table}]", connection))
             {
                 var result = await command.ExecuteScalarAsync();
                 return Convert.ToInt32(result);

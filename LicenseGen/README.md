@@ -1,100 +1,120 @@
-# License Generator - SOFTO ALERT
+# License Generator API - SOFTO ALERT
 
-Tool to generate encrypted license keys and credentials for TimeOfficeSync.
+ASP.NET Core Minimal API for generating encrypted license keys and credentials for TimeOfficeSync.
 
-## Location
+## API Endpoints
 
-```
-D:\Projects\timeoffice\LicenseGen\
-```
-
-## How to Run
-
-Open PowerShell and navigate to the folder:
-
-```powershell
-cd D:\Projects\timeoffice\LicenseGen
+### Health Check
+```http
+GET /health
 ```
 
-## Commands
+### Encrypt Text
+```http
+POST /api/encrypt
+Content-Type: application/json
 
-### 1. Generate License Key (for expiry date)
-
-```powershell
-dotnet run -- license "2026-12-31 23:59:59"
-```
-
-**Output:** Encrypted license key to paste in `appsettings.json` → `LicenseSettings:LicenseKey`
-
-### 2. Encrypt Any Text (for email credentials)
-
-```powershell
-dotnet run -- encrypt "info@softovista.com"
-dotnet run -- encrypt "your-password"
-```
-
-**Output:** Encrypted text to paste in `appsettings.json` → `EmailSettings:EncryptedUsername` or `EncryptedPassword`
-
-### 3. Decrypt Text
-
-```powershell
-dotnet run -- decrypt "encrypted-text-here"
-```
-
-**Output:** Original plain text
-
-## Examples
-
-### Generate License Key
-
-```powershell
-# For 1 month expiry
-dotnet run -- license "2026-08-31 23:59:59"
-
-# For 6 months expiry
-dotnet run -- license "2027-01-31 23:59:59"
-
-# For 1 year expiry
-dotnet run -- license "2027-07-31 23:59:59"
-```
-
-### Encrypt Email Credentials
-
-```powershell
-# Encrypt username
-dotnet run -- encrypt "your-email@example.com"
-# Output: (encrypted value - copy to appsettings.json)
-
-# Encrypt password
-dotnet run -- encrypt "your-password"
-# Output: (encrypted value - copy to appsettings.json)
-```
-
-## Update appsettings.json
-
-After generating keys, update `appsettings.json`:
-
-```json
 {
-  "LicenseSettings": {
-    "LicenseKey": "paste-generated-license-key-here"
-  },
-  "EmailSettings": {
-    "EncryptedUsername": "paste-encrypted-username-here",
-    "EncryptedPassword": "paste-encrypted-password-here"
-  }
+  "text": "info@softovista.com",
+  "key": "optional-custom-key"
 }
 ```
 
-## Build Solution
+### Decrypt Text
+```http
+POST /api/decrypt
+Content-Type: application/json
 
-```powershell
-cd D:\Projects\timeoffice
-dotnet build
+{
+  "text": "encrypted-base64-string",
+  "key": "optional-custom-key"
+}
 ```
 
-## Notes
+### Generate License Key
+```http
+POST /api/license/generate
+Content-Type: application/json
 
-- All encryption uses AES with key: (hidden for security)
+{
+  "expiry": "2026-12-31 23:59:59",
+  "key": "optional-custom-key"
+}
+```
+
+### Decrypt License
+```http
+POST /api/license/decrypt
+Content-Type: application/json
+
+{
+  "license": "encrypted-license-key",
+  "key": "optional-custom-key"
+}
+```
+
+## IIS Hosting Setup
+
+### Prerequisites
+1. Install .NET 8 Hosting Bundle: https://dotnet.microsoft.com/download/dotnet/8.0
+2. Enable ASP.NET Core Module in IIS
+
+### Steps
+```powershell
+# Publish the app
+cd D:\Projects\timeoffice\LicenseGen
+dotnet publish -c Release -o C:\inetpub\LicenseGen
+
+# Create IIS Site
+# 1. Open IIS Manager
+# 2. Right-click Sites > Add Website
+# 3. Site name: LicenseGen
+# 4. Physical path: C:\inetpub\LicenseGen
+# 5. Port: 8080 (or your preferred port)
+# 6. Click OK
+```
+
+### Verify Installation
+```powershell
+# Test health endpoint
+curl http://localhost:8080/health
+
+# Test encryption
+curl -X POST http://localhost:8080/api/encrypt -H "Content-Type: application/json" -d "{\"text\": \"test\"}"
+```
+
+## Local Development
+
+```powershell
+# Run locally
+dotnet run
+
+# API will be available at http://localhost:5000
+```
+
+## Configuration
+
+### Custom Encryption Key
+The API uses a default key if none is provided. For production, set a custom key:
+
+```json
+{
+  "text": "your-text",
+  "key": "your-16-24-32-byte-encryption-key"
+}
+```
+
+### Environment Variables
+```powershell
+# Set in IIS Application Pool or web.config
+ASPNETCORE_ENVIRONMENT=Production
+ASPNETCORE_URLS=http://+:8080
+```
+
+## Security Notes
+
+- All encryption uses AES with SHA256 key derivation
 - License key format: `yyyy-MM-dd HH:mm:ss`
 - Encrypted values are Base64 encoded
+- Use HTTPS in production
+- Consider adding authentication for production use

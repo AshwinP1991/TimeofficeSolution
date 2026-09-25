@@ -1,12 +1,7 @@
 using TimeOfficeSync;
 using TimeOfficeSync.Services;
 
-// --- Decrypt / Encrypt utility mode (does not start the worker) ---
-// Usage:
-//   dotnet run -- --decrypt "<cipher>" [--key "<key>"]
-//   dotnet run -- --decrypt-license "<licenseKey>" [--key "<key>"]
-//   dotnet run -- --encrypt "<plainText>" [--key "<key>"]
-//   dotnet run -- --show-license   (decrypts LicenseSettings:LicenseKey from appsettings.json)
+
 if (args.Length > 0 && (args[0].Equals("--decrypt", StringComparison.OrdinalIgnoreCase)
     || args[0].Equals("--decrypt-license", StringComparison.OrdinalIgnoreCase)
     || args[0].Equals("--encrypt", StringComparison.OrdinalIgnoreCase)
@@ -99,9 +94,19 @@ builder.Services.AddWindowsService(options =>
 
 // Register services
 builder.Services.AddHttpClient<ApiService>();
+builder.Services.AddHttpClient<FieldAssistProvider>();
+builder.Services.AddSingleton<ApiLogService>();
 builder.Services.AddSingleton<DatabaseService>();
 builder.Services.AddSingleton<EmailService>();
 builder.Services.AddSingleton<LicenseService>();
+builder.Services.AddSingleton<IPunchDataProvider>(sp =>
+{
+    var cfg = sp.GetRequiredService<IConfiguration>();
+    var provider = cfg["ApiSettings:Provider"] ?? "ETimeOffice";
+    return provider.Equals("FieldAssist", StringComparison.OrdinalIgnoreCase)
+        ? sp.GetRequiredService<FieldAssistProvider>()
+        : sp.GetRequiredService<ApiService>();
+});
 builder.Services.AddHostedService<Worker>();
 
 var host = builder.Build();

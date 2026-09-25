@@ -5,15 +5,15 @@ namespace TimeOfficeSync;
 public class Worker : BackgroundService
 {
     private readonly ILogger<Worker> _logger;
-    private readonly ApiService _apiService;
+    private readonly IPunchDataProvider _punchDataProvider;
     private readonly DatabaseService _databaseService;
     private readonly LicenseService _licenseService;
     private readonly IConfiguration _configuration;
 
-    public Worker(ILogger<Worker> logger, ApiService apiService, DatabaseService databaseService, LicenseService licenseService, IConfiguration configuration)
+    public Worker(ILogger<Worker> logger, IPunchDataProvider punchDataProvider, DatabaseService databaseService, LicenseService licenseService, IConfiguration configuration)
     {
         _logger = logger;
-        _apiService = apiService;
+        _punchDataProvider = punchDataProvider;
         _databaseService = databaseService;
         _licenseService = licenseService;
         _configuration = configuration;
@@ -77,7 +77,7 @@ public class Worker : BackgroundService
             _logger.LogInformation("First run, using {Days} days back as FromDate: {FromDate}", fromDateDaysBack, fromDate);
         }
 
-        var punchData = await _apiService.GetPunchDataAsync(fromDate, toDate);
+        var punchData = await _punchDataProvider.GetPunchDataAsync(fromDate, toDate);
 
         if (punchData.Count > 0)
         {
